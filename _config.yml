@@ -1,2 +1,13 @@
 baseurl: /
 highlighter: rouge
+timezone: Asia/Shanghai
+
+website:
+  EnglishName: Scala Stack
+  ChineseName: Scala技术栈
+
+author:
+  EnglishName: Wayne Wang
+  ChineseName: 王石冲
+
+
