@@ -1,7 +1,8 @@
 ---
 layout: page
-title: 一门神奇的语言(上)
+title: 一门神奇的语言
 time: 2016-01-23 23:01:00
+updatedTime: 2016-01-28 00:15:00
 ---
 
 ###简述
@@ -166,6 +167,114 @@ case class Customer(ID: Long, name: String, age: Int, emailAddress: String, phon
 
 ###函数皆对象
 
+很多人在初学Scala的时候，也许会被这样的语法搞懵：
+
+{% highlight scala %}
+val sum: (Int, Int) => Int = (a, b) => a + b
+{% endhighlight %}
+
+或者这样的：
+{% highlight scala %}
+def sum(a:Int, b:Int) = a + b
+val sumFunction: (Int, Int) => Int = sum
+{% endhighlight %}
+
+如果是从Java阵营转换过来的，可能看到第一个`val sum:(Int, Int) => Int = (a, b) => a + b`就懵了，心里会想，`(Int, Int) => Int`是个什么鬼？后面接的a和b又是什么玩意儿？
+
+后来看到类似于`val sumFunction:(Int, Int) => Int = sum`更懵了……`def`声明的不是函数吗，怎么没有加调用参数获得返回值就赋值给了常量？这种语法怎么能说得通？
+
+我相信很多人在初学Scala的函数的概念的时候，经常被一句话“函数是一等公民”搞晕。编程语言里面哪里冒出来的公民的概念？什么又是一等公民？既然有一等公民，那什么又是二等公民呢？
+
+由此我们回想一下Java里面定义一个方法的过程。
+
+首先我们要有一个class，然后在class里面按照如下格式来声明一个方法：
+
+{% highlight java %}
+modifier returnValueType methodName(list of parameters) {
+   // Method body;
+}
+{% endhighlight %}
+
+声明好方法以后，我们想实现一些特别的行为，例如在函数里面声明函数，这时候我们从语言层面上就开始遇到了各种不同的限制。例如有一个函数fa，在fa中多次调用函数fb:
+ 
+{% highlight java %}
+private void fa() {
+    fb();
+    fb();
+    //other method body
+}
+
+private void fb() {
+    //Do something.
+}
+{% endhighlight %}
+
+也许fb只能被fa调用，你希望fb只出现在fa的代码块里面，于是你试图像如下的方式实现fa：
+
+{% highlight java %}
+private void fa() {
+    private void fb() { //不会成功，编译器直接报错
+      //Do something.
+    }
+    fb();
+    fb();
+    //other method body
+}
+{% endhighlight %}
+
+但是明显会是失败的，编译无法通过。函数只能在class最外层大括号里面声明，而在函数里面无法声明函数，也无法将函数当作返回值返回，这是Java对函数的限制。
+
+可是相同的要求对基本数据类型来说呢？比如，int类型可以在class最外层的大括号里面声明，这个时候声明的变量就是class的成员变量；也可以在一个函数里面声明一个int变量，这个变量就作为了函数的局部变量存在；然后如果这个函数的返回类型是int的话，又可以将这个变量当作函数的返回值给返回出去。所以，int相对于函数来说，随时随地都能声明，随时随地都能返回。这样跟函数一比，明显就高到不知道哪里去了，这可不就是一等公民吗？
+
+哦，这里必须得纠正上面我说的一个错误，Java里面的那个玩意儿其实叫做method，方法，而不是function，函数。
+
+让我们回到Scala。所谓的函数是一等公民，至少作为一个函数不能比Java的基本类型受到的待遇差吧。所以，当我们需要在Scala里面使用函数的时候，应该也能做到随时随地都能声明，随时随地都能返回：
+
+{% highlight scala %}
+
+def sum(a:Int, b:Int):Int = a + b
+
+def addNFunction(n:Int):Int => Int = {
+    def add(number:Int):Int = n + number
+    add   //放在函数体最后一行的表示返回值
+}
+
+def add5 = addNFunction(5)
+
+def fa() = {
+    def fb() = {
+     //Do something
+    }
+    fb()
+    fb()
+    //do other things
+}
+
+{% endhighlight %}
+
+上面的写法在Scala里面都是合法的。由于Scala中可以将函数作为返回值返回，这也就帮助Scala拥有了[柯里化](https://zh.wikipedia.org/wiki/%E6%9F%AF%E9%87%8C%E5%8C%96)的能力，也就是说我们可以在Scala中将一个含有多个参数的函数变换成接受一个单一参数（最初函数的第一个参数），并且返回接受余下的参数并返回结果的新函数的函数。这是柯里化的概念，至于柯里化的用途我们以后再写博文细说。
+
+我们说回前面提到的内容，`val sum:(Int, Int) => Int = (a, b) => a + b`是什么？
+
+很明显，`val`声明的是一个不变量`sum`，这个`sum`的类型是`(Int, Int) => Int`。然后值是`(a, b) => a + b `。
+
+那么`(Int, Int) => Int`是什么呢？其实，`=>`这个符号是Scala的`FunctionN`(N是一个大于等于0小于等于22的值)的语法糖。把这个表达式解语法糖以后，得到的是:
+
+{% highlight scala %}
+val sum:Function2[Int, Int, Int] = new Function2[Int, Int, Int] {
+    override def apply(a: Int, b: Int): Int = a + b
+}
+{% endhighlight %}
+
+其中apply是Scala里面的一个特别的方法。如果一个类或者特质声明了apply方法，则这个类或者特质的实例可以通过实例名后面带括号的方式调用apply方法。例如上面的代码写出来以后，就可以用`sum(3, 5)`来调用`sum.apply(3, 5)`这个方法。
+
+以此类推，在Scala中，你见到的任何一个函数都是一个`FunctionN`类型的实例。其中`=>`是语法糖，作为类型声明的时候，`T => R`或者(`(T1,T2,...,TN) => R`)代表类型`Function1[T, R]`(或者`FunctionN[T1,T2,...,TN,R]`)；而`=>`放在`=`号后面的时候，代表对`FunctionN`类型的`apply`方法的实现。至于`def`和`val`声明的函数的区别，我后来会写博文再做细致的讲解。
+
+至此，喜欢“面向对象”的小伙伴们应该清楚地认识到，Scala是一门纯的不能再纯的面向对象语言。不仅函数是对象，Java里面的八种基本类型在Scala里面也不复存在，变成了Scala封装好了的`Byte`、`Int`、`Float`、`Double`、`Boolean`、`Char`、`Short`、`Long`，而数组则被封装成为了`Array[T]`类型。其中`[T]`代表`Array`是可以泛型的。从这个角度来看，Scala是一门比Java更加纯粹的面向对象语言，真正地做到了“万物皆对象”。
+
+那么，既然Scala是这样纯净的一门面向对象语言，那么函数式的编程方法，在Scala中有什么意义呢？
+
+###函数式编程
 
 
 
