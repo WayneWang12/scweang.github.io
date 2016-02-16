@@ -1,5 +1,5 @@
 baseurl: /
-highlighter: pygments
+highlighter: rouge
 timezone: Asia/Shanghai
 
 website:
