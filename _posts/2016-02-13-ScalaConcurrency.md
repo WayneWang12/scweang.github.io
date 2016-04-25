@@ -92,7 +92,7 @@ public class ImmutablePeople {
   private final String name;
   private final String location;
 
-  public ImmutableUser(String name, String location) {
+  public ImmutablePeople(String name, String location) {
     this.name = name;
     this.location = location;
   }
@@ -119,31 +119,105 @@ val wayne = ImmutablePeople("Wayne", "cafe")
 val swimmingWayne = wayne.copy(location = "gym")
 {% endhighlight %}
 
-其中changedWayne称作是wayne的一个新的快照。使用不可变的对象并不意味着在Scala里面你不变动任何一个状态。相反地，我们只是提供一个这个时间这个状态的一个快照。而这样的与时间相对应的快照更加符合现实，也就是说你所观察到的是此时此刻的这个状态。而你可以根据这个状态做出自己此时的下一步反应，而不用担心这个状态发生变化。拿上面的例子做对比，这就好比我是一个会分身术的人，朋友给我打电话的时候，我就变出了一个在咖啡厅里面一直喝咖啡的我，然后程序的下一步我又复制了一个移动到健身中心健身的我，这样一来，一个我来招呼朋友，一个我去健身游泳，这样就满足了并发性，又可以保证友谊的小船还能稳当行驶不翻船。
+其中swimmingWayne称作是wayne的一个新的快照。使用不可变的对象并不意味着在Scala里面你不变动任何一个状态。相反地，我们只是提供一个这个时间这个状态的一个快照。而这样的与时间相对应的快照更加符合现实，也就是说你所观察到的是此时此刻的这个状态。而你可以根据这个状态做出自己此时的下一步反应，而不用担心这个状态发生变化。拿上面的例子做对比，这就好比我是一个会分身术的人，朋友给我打电话的时候，我就变出了一个在咖啡厅里面一直喝咖啡的我，然后程序的下一步我又复制了一个移动到健身中心健身的我，这样一来，一个我来招呼朋友，一个我去健身游泳，这样就满足了并发性，又可以保证友谊的小船还能稳当行驶不翻船。
 {% highlight scala %}
 val wayne = ImmutableUser("Wayne", "abc@scweang.me")
-friend.callAndThreat(wayne)
+friend.callAndThreat(wayne) //异步操作
 val swimmingWayne = wayne.copy(location = "gym")
-swimming(swimmingWayne)
+swimming(swimmingWayne)  //异步操作
+
 {% endhighlight %}
 
 当然，像这样的不变对象有时候是满足不了程序世界的要求的。不变是很好的，但是很多时候，有一些状态必须是变化的。例如一个账户里面的资金数额，你只能读取当前状态做操作，而不能随意地去读取之前的状态来进行处理（要不然我就一直用我最有钱时候的账户去买东西了）。遇到这样的情况Scala是怎么解决的呢？那就是使用Actor。
 
-Actor说起来并不是一个很新颖的技术模型。早在1973年，Actor model就被提出，之后被Erlang借鉴，用来构建了一个稳定性达到99.9999%的电信系统。但是由于Erlang主要只是很小众的一部分人在使用，所以Actor模型一直不温不火。近期Actor之所以重新火起来，一是因为最近的计算机往多核发展，大家在寻找并发解决方案的时候想起来了Actor，另外就是因为Scala对函数式的支持导致用Actor模型来写代码变得简单可行，并且产生了一个非常强大的开源库Actor库：[Akka](http://akka.io)。
+Actor说起来并不是一个很新颖的技术模型。早在1973年，Actor model就被提出，之后被Erlang借鉴，用来构建了一个稳定性达到99.9999999%的电信系统。但是由于Erlang主要只是很小众的一部分人在使用，所以Actor模型一直不温不火。近期Actor之所以重新火起来，一是因为最近的计算机往多核发展，大家在寻找并发解决方案的时候想起来了Actor，另外就是因为Scala对函数式的支持导致用Actor模型来写代码变得简单可行，并且产生了一个非常强大的开源Actor库：[Akka](http://akka.io)。
 
 那么，什么是Actor呢？
 
-Scala之前在标准库里面带有一个自己实现的Actor模型。但是后来由于Akka的出现，Scala将自己的Actor库废弃了，并推荐大家使用Akka。Akka的Actor说白了，就是一个只有一个调用方法的对象。你与这个对象的所有交互只能通过向它发送消息来进行，而不能有其他任何的途径。假设你持有了一个Actor对象的引用，你只能通过如下方式跟这个Actor进行通信：
+Scala之前在标准库里面带有一个自己实现的Actor模型。但是后来由于Akka的出现，Scala将自己的Actor库废弃了，并推荐大家使用Akka。Actor说白了，就是一个只有一个调用方法的对象。你与这个对象的所有交互只能通过向它发送消息来进行，而不能有其他任何的途径。假设你持有了一个Actor对象的引用，你只能通过如下方式跟这个Actor进行通信：
 {% highlight scala %}
 actor ! "Hello!"
 {% endhighlight %}
 
+其中`!`只是向actor发消息的函数的一个简化而已。`!`函数的声明如下：
+{% highlight scala %}
+def !(message: Any)(implicit sender: ActorRef = Actor.noSender): Unit
+{% endhighlight %}
 
+`implicit`关键字后面的`sender`表示这个函数接受一个隐式的参数。如果你是在actor内部向其他actor发消息，则sender就是这个actor；如果是在actor外面发送的消息，则sender就是默认的`Actor.noSender`。
 
+那么，怎么定义一个actor呢？
+{% highlight scala %}
+class GreetingActor extends Actor {
+  var greetingCounts = 0
 
+  override def receive: Receive = {
+    case "Hello" =>
+      sender() ! "world!"
+      greetingCounts += 1
+    case "Count" =>
+      sender() ! greetingCounts
+  }
+}
+{% endhighlight %}
 
+其中`greetingCounts`就是GreetingActor里面的可变状态。但是这个状态是私有的，并不共享。如果你想获取`greetingCounts`的值，首先你需要向greetingActor发送`"Count"`消息，然后收到greetingActor给你回复的`greetingCounts`的值，再进行处理。
 
+Akka的Actor提供如下的保证：
 
+1. 单个Actor每一时刻只会处理一条消息；
+2. 针对每一对发送者接收者，发送者发送的消息都是被接收者顺序接收并的。如
+{% highlight scala %}
+actor ! "1"
+actor ! "2"
+actor ! "3"
+{% endhighlight %}
+这里面，actor会依次处理"1"、"2"、"3"这三条消息。
+
+关于Actor的介绍暂时只止于这里。更多的内容后来会写博文慢慢介绍，或者你可以直接去看Akka的[官方文档](http://akka.io/docs/)。基于Akka可以构建一个强大的、稳健的、高并发、高性能的分布式系统。按照官方文档介绍的，Akka的单机性能可以达到5000万每秒的消息处理能力，并且1GB内存可以承载250万个actor。由于actor模型将并发和可变状态做了一个极度的简化，所以越来越多的系统开始基于Akka来构建，譬如Scala社区的杀手级框架[Spark](http://spark.apache.org/)。
+
+### 4.Scala的Future
+
+这一节要介绍的并不是Scala的未来，而只是Scala的一个类，`Future`。
+
+Scala的`Future`说起来其实并没有什么特别的。如果你对Java的并发机制熟悉的话，你可以将Future看作是一个容器，里面包含着提交给线程池执行的一个Task最终会返回回来的结果。说起来，Scala其实只是帮你提供了一个便利的方式提交任务给线程池而已。所以每次你使用Scala的`Future`的时候，必须引入一个隐式的`ExecutionContext`或者将这个值显式地传递给Future，否则编译器会给你报错：
+
+>Cannot find an implicit ExecutionContext. You might pass
+>an (implicit ec: ExecutionContext) parameter to your method
+>or import scala.concurrent.ExecutionContext.Implicits.global.
+
+这里面说到的`scala.concurrent.ExecutionContext.Implicits.global`其实就是一个默认的线程池。引入这个变量以后，你创建的任何一个Future里面的内容，都会提交到这个线程池里面执行，然后得到结果。如：
+{% highlight scala %}
+import  scala.concurrent.ExecutionContext.Implicits.global
+Future{
+  getSomeResult()
+}
+{% endhighlight %}
+
+这个默认的线程池有什么特别的地方呢？
+
+首先它的类型很特别，是一个`ForkJoinPool`。这个线程池默认的线程数比我们通常使用的`ThreadPool`要小很多，一般都是核心数那么多的线程。使用与核心数大小的线程有一个好处就是每一个线程可以占据一个核心来执行任务。这样线程之间的切换就会减少很多，减少上下文切换开销，提高CPU利用率。
+
+另外一个就是每一个线程拥有自己的任务队列。被提交的任务都会加入某一个线程的任务队列中。如果某一个线程执行任务比较快，任务队列里面的任务都被执行完以后，这个线程并不会就此休眠，而是去其他线程的任务队列的末尾里面“偷”任务过来执行。这样就可以保证所有的线程都尽量在满负荷运行，进一步提高CPU的利用率。这种机制就叫做[Work Stealing](https://en.wikipedia.org/wiki/Work_stealing)。
+
+Future里面的内容都是延迟处理的，只有在提交到线程池执行的时候，里面的内容才会得到执行。就是说，如果你有一个阻塞的操作，可以将它放到Future里面去，然后主线程的代码可以继续执行，不会受到影响：
+{% highlight scala %}
+Future{doSomethingBlocking()}
+println("Hello, world!")
+{% endhighlight %}
+
+上面的代码中，`"Hello, world"`是会直接被打印的，而不会等到`doSomethingBlocking()`执行完毕。
+
+不过值得注意的一点是，由于Scala提供的默认线程池的线程数量较少，所以在Future中提交的任务最好不要是IO阻塞的。如果提交的阻塞的任务过多，会导致后来提交的较快的任务必须等待前面的阻塞任务执行完成以后才能进行。这样会急剧降低任务执行的吞吐量。在这种情况下，我们应该将IO阻塞的任务交给另外一个线程数量较多的线程池来执行：
+{% highlight scala %}
+import  scala.concurrent.ExecutionContext.Implicits.global
+
+val anotherExecutionContext= ExecutionContext.fromExecutor(Executors.newFixedThreadPool(200))
+Future{doSomthingQuick()}
+Future{doSomethingBlocking()}(anotherExecutionContext)
+{% endhighlight %}
+
+除了上述的内容以外，Scala的Future最大的优点是提供了众多的组合操作。这些组合操作可以帮助你极为方便地注册回调操作。其中最强大的就是基于Monad而衍生的各种操作。Scala的Future是一个monad，这是它和Java的FutureTask最大的一个区别。而基于monad产生的各种操作，具体的内容，我们下次再讲。
 
 
 
